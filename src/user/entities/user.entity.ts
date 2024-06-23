@@ -10,9 +10,12 @@ export class User {
   name: string;
 
   @Column()
+  password: string;
+  
+  @Column()
   email: string;
 
-  @Column({ default: 'ADMIN' })
+  @Column({ default: 'admin' })
   role: string;
 
   @Column({ default: 0 })
