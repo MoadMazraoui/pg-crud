@@ -24,10 +24,9 @@ export class UserController {
   async createUser(
     @Body('name') name: string,
     @Body('email') email: string,
-    @Body('password') password: string,
   ): Promise<User> {
     try {
-      return await this.userService.createUser(name, email, password);
+      return await this.userService.createUser(name, email);
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }

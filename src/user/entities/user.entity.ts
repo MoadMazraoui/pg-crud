@@ -1,5 +1,3 @@
-// user.entity.ts
-
 import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 import { Leave } from 'src/leave/entities/leave.entity';
 
@@ -14,7 +12,7 @@ export class User {
   @Column()
   email: string;
 
-  @Column({ default: 'USER' })
+  @Column({ default: 'ADMIN' })
   role: string;
 
   @Column({ default: 0 })

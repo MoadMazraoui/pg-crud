@@ -2,24 +2,23 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Leave } from './entities/leave.entity';
-import { User } from 'src/user/entities/user.entity';
-import { UserService } from 'src/user/user.service';
+import { UserService } from '../user/user.service';
 import { MailService } from '../mail.service';
+import { User } from '../user/entities/user.entity';
 
 @Injectable()
 export class LeaveService {
   constructor(
     @InjectRepository(Leave)
     private leaveRepository: Repository<Leave>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private readonly userService: UserService,
     private mailService: MailService,
   ) {}
 
   async requestLeave(userId: string, reason: string, startDate: Date, endDate: Date): Promise<Leave> {
     const leaveDays = this.calculateLeaveDays(startDate, endDate);
 
-    const user = await this.userRepository.findOneBy({id: userId});
+    const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
@@ -43,7 +42,7 @@ export class LeaveService {
   }
 
   async approveLeave(leaveId: string): Promise<Leave> {
-    const leave = await this.leaveRepository.findOneBy({id: leaveId });
+    const leave = await this.leaveRepository.findOne({ where: { id: leaveId }, relations: ['user'] });
     if (!leave) {
       throw new NotFoundException(`Leave with ID ${leaveId} not found`);
     }
@@ -58,13 +57,13 @@ export class LeaveService {
     
     await this.updateUserLeaveBalances(leave.user, leaveDays);
 
-    await this.userRepository.save(leave.user);
+    await this.userService.updateUser(leave.user); 
 
     return await this.leaveRepository.save(leave);
   }
 
   async rejectLeave(leaveId: string): Promise<Leave> {
-    const leave = await this.leaveRepository.findOneBy({id: leaveId});
+    const leave = await this.leaveRepository.findOne({ where: { id: leaveId }, relations: ['user'] });
     if (!leave) {
       throw new NotFoundException(`Leave with ID ${leaveId} not found`);
     }
@@ -75,16 +74,42 @@ export class LeaveService {
 
     return await this.leaveRepository.save(leave);
   }
+
   async getLeaveById(id: string): Promise<Leave> {
-    const leave = await this.leaveRepository.findOneBy({id: id});
+    const leave = await this.leaveRepository.findOne({ where: { id }, relations: ['user'] });
     if (!leave) {
       throw new NotFoundException(`Leave with ID ${id} not found`);
     }
     return leave;
   }
-  async getAllLeaves(): Promise<Leave[]> {
-    return await this.leaveRepository.find();
+
+  async cancelLeave(leaveId: string): Promise<Leave> {
+    const leave = await this.leaveRepository.findOne({ where: { id: leaveId }, relations: ['user'] });
+    if (!leave) {
+      throw new NotFoundException(`Leave with ID ${leaveId} not found`);
+    }
+
+    if (leave.status !== 'approved') {
+      throw new Error('Only approved leaves can be canceled');
+    }
+    
+    leave.status = 'canceled';
+
+    const leaveDays = this.calculateLeaveDays(leave.startDate, leave.endDate);
+    leave.user.reliquatConge += leaveDays;
+    leave.user.congeConsomme -= leaveDays;
+
+    await this.userService.updateUser(leave.user); 
+    
+    await this.sendNotificationEmailToUser(leave.user.email, 'Leave Canceled', 'Your leave request has been canceled.');
+
+    return await this.leaveRepository.save(leave);
   }
+
+  async getAllLeaves(): Promise<Leave[]> {
+    return await this.leaveRepository.find({ relations: ['user'] });
+  }
+
   private calculateLeaveDays(startDate: Date, endDate: Date): number {
     let leaveDays = 0;
     const currentDate = new Date(startDate);
@@ -96,18 +121,20 @@ export class LeaveService {
     }
     return leaveDays;
   }
+
   private async updateUserLeaveBalances(user: User, leaveDays: number): Promise<void> {
     user.reliquatConge -= leaveDays;
     user.congeConsomme += leaveDays;
-    await this.userRepository.save(user);
+    await this.userService.updateUser(user); 
   }
+
   private async sendNotificationEmailToUser(to: string, subject: string, message: string): Promise<void> {
     await this.mailService.sendMail(to, subject, message);
     console.log(`Notification sent to ${to}: ${subject} - ${message}`);
   }
 
   private async sendNotificationEmailToAdmin(reason: string, startDate: Date, endDate: Date): Promise<void> {
-    const adminEmail = 'mazraoui3@gmail.com';
+    const adminEmail = 'admin@example.com';
     const subject = 'New Leave Request';
     const message = `New leave request:\nReason: ${reason}\nStart Date: ${startDate}\nEnd Date: ${endDate}`;
     
