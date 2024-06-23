@@ -1,4 +1,4 @@
-import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { UserService } from './user.service';
 import { User } from './entities/user.entity';
 
@@ -18,5 +18,18 @@ export class UserController {
   @Get()
   async getAllUsers(): Promise<User[]> {
     return await this.userService.findAll();
+  }
+
+  @Post()
+  async createUser(
+    @Body('name') name: string,
+    @Body('email') email: string,
+    @Body('password') password: string,
+  ): Promise<User> {
+    try {
+      return await this.userService.createUser(name, email, password);
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
   }
 }

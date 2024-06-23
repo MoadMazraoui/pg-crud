@@ -13,7 +13,6 @@ export class LeaveService {
     private leaveRepository: Repository<Leave>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    private userService: UserService,
     private mailService: MailService,
   ) {}
 
